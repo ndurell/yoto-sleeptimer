@@ -31,7 +31,7 @@ class ShouldArm(unittest.TestCase):
         self.assertFalse(arm(sleep_timer_active=True))
 
     def test_unknown_timer_state_still_arms(self):
-        self.assertTrue(arm(sleep_timer_active=None))
+        self.assertFalse(arm(sleep_timer_active=None))
 
     def test_cooldown(self):
         self.assertFalse(arm(last_arm_monotonic=950.0))

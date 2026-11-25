@@ -3,6 +3,7 @@ running outside Docker)."""
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -38,7 +39,7 @@ def _load_dotenv(path: Path) -> None:
     """Minimal .env reader for non-Docker runs. Real environment variables win."""
     if not path.is_file():
         return
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -68,6 +69,8 @@ def _bool(name: str) -> bool:
 
 def load(require_client_id: bool = True) -> Config:
     _load_dotenv(Path.cwd() / ".env")
+    if hasattr(time, "tzset"):
+        time.tzset()  # apply a TZ that came from .env to local times and logs
 
     client_id = os.environ.get("YOTO_CLIENT_ID", "").strip()
     if require_client_id and (not client_id or client_id == PLACEHOLDER_CLIENT_ID):

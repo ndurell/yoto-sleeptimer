@@ -14,6 +14,7 @@ import hashlib
 import os
 import secrets
 import sys
+import threading
 import urllib.parse
 
 import aiohttp
@@ -26,7 +27,9 @@ AUTHORIZE_URL = "https://login.yotoplay.com/authorize"
 TOKEN_URL = "https://login.yotoplay.com/oauth/token"
 AUDIENCE = "https://api.yotoplay.com"
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8787/callback"
-DEFAULT_SCOPES = "openid profile offline_access"
+# Yoto only grants the scopes requested here (ticking them on the app is not
+# enough), and the watcher must list players and send them commands.
+DEFAULT_SCOPES = "openid profile offline_access family:devices:view family:devices:control"
 
 _DONE_PAGE = """<!doctype html><meta charset="utf-8"><title>Signed in</title>
 <body style="font-family:sans-serif;max-width:32em;margin:4em auto">
@@ -105,27 +108,42 @@ async def _wait_for_code(redirect_uri: str, state: str) -> str:
     except OSError as exc:
         print(f"(Could not listen on {bind}:{port}: {exc}. Use the paste option.)")
 
-    async def read_paste() -> None:
-        while not result.done():
-            line = await loop.run_in_executor(None, sys.stdin.readline)
+    def on_paste(line: str) -> None:
+        if result.done():
+            return
+        line = line.strip()
+        if not line:
+            return
+        query = urllib.parse.urlparse(line).query or line
+        params = {k: v[0] for k, v in urllib.parse.parse_qs(query).items()}
+        if "code" not in params and "error" not in params:
+            print("That doesn't look like the callback address "
+                  "(it should contain ?code=...). Try again.")
+            return
+        settle(params)
+
+    def read_paste() -> None:
+        # A daemon thread, not the event loop's executor: a blocked readline
+        # can't be cancelled, and asyncio.run() would wait for an executor
+        # worker at shutdown, so login would hang until Enter was pressed
+        # after the browser callback (or the timeout) had already finished.
+        # A daemon thread is simply abandoned when the program exits.
+        while True:
+            try:
+                line = sys.stdin.readline()
+            except (OSError, ValueError):
+                return
             if not line:
                 return  # no terminal attached; rely on the callback
-            line = line.strip()
-            if not line:
-                continue
-            query = urllib.parse.urlparse(line).query or line
-            params = {k: v[0] for k, v in urllib.parse.parse_qs(query).items()}
-            if "code" not in params and "error" not in params:
-                print("That doesn't look like the callback address "
-                      "(it should contain ?code=...). Try again.")
-                continue
-            settle(params)
+            try:
+                loop.call_soon_threadsafe(on_paste, line)
+            except RuntimeError:
+                return  # event loop already closed
 
-    paste_task = asyncio.ensure_future(read_paste())
+    threading.Thread(target=read_paste, name="login-paste", daemon=True).start()
     try:
         return await asyncio.wait_for(result, timeout=600)
     finally:
-        paste_task.cancel()
         await runner.cleanup()
 
 

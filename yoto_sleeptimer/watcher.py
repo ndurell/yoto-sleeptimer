@@ -16,6 +16,13 @@ from .logic import player_selected, should_arm
 
 log = logging.getLogger("yoto-sleeptimer")
 
+# A player that is playing but hasn't reported whether a sleep timer is
+# running gets this long to report it (the live connection asks every player
+# for a full events report when it connects). If it still hasn't, assume no
+# timer is running, or a player that never reports the field would never be
+# armed at all.
+UNKNOWN_TIMER_GRACE_SECONDS = 20
+
 
 async def run_once(cfg: Config, session: aiohttp.ClientSession) -> None:
     from yoto_api import YotoClient
@@ -30,6 +37,7 @@ async def run_once(cfg: Config, session: aiohttp.ClientSession) -> None:
         log.info("Refresh token saved.")
 
     last_arm: Dict[str, float] = {}
+    pending_unknown: Dict[str, asyncio.Task] = {}
     sleep_seconds = cfg.sleep_minutes * 60
 
     async with YotoClient(client_id=cfg.client_id, session=session,
@@ -49,17 +57,38 @@ async def run_once(cfg: Config, session: aiohttp.ClientSession) -> None:
         log.info("Watching %d player(s): %s", len(players),
                  ", ".join(f"{p.device.name} ({pid})" for pid, p in players.items()))
 
+        async def recheck_unknown(player) -> None:
+            await asyncio.sleep(UNKNOWN_TIMER_GRACE_SECONDS)
+            pending_unknown.pop(player.device.device_id, None)
+            ev = player.last_event
+            if ev is None or ev.sleep_timer_active is not None:
+                return  # it reported in the meantime; that update decided
+            log.info("%s never reported its sleep timer state; assuming none is set.",
+                     player.device.name)
+            await evaluate(player, assume_no_timer=True)
+
         async def on_update(player) -> None:
+            await evaluate(player)
+
+        async def evaluate(player, assume_no_timer: bool = False) -> None:
             ev = player.last_event
             if ev is None:
                 return
             pid = player.device.device_id
             if pid not in players:
                 return
+            playing = ev.playback_status == PlaybackStatus.PLAYING
+            timer_active = ev.sleep_timer_active
+            if timer_active is None and assume_no_timer:
+                timer_active = False
+            if timer_active is None and playing and pid not in pending_unknown:
+                log.debug("%s is playing but hasn't reported its timer state yet; waiting.",
+                          player.device.name)
+                pending_unknown[pid] = asyncio.ensure_future(recheck_unknown(player))
             now = time.monotonic()
             if not should_arm(
-                playing=ev.playback_status == PlaybackStatus.PLAYING,
-                sleep_timer_active=ev.sleep_timer_active,
+                playing=playing,
+                sleep_timer_active=timer_active,
                 now_monotonic=now,
                 last_arm_monotonic=last_arm.get(pid),
                 cooldown_seconds=cfg.cooldown_seconds,
@@ -97,7 +126,11 @@ async def run_once(cfg: Config, session: aiohttp.ClientSession) -> None:
             raise RuntimeError(
                 f"live connection timed out after {cfg.connect_timeout_seconds}s") from None
         log.info("Connected; waiting for playback.")
-        await disconnected.wait()
+        try:
+            await disconnected.wait()
+        finally:
+            for task in pending_unknown.values():
+                task.cancel()
         raise RuntimeError("live connection lost")
 
 

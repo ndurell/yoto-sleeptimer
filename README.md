@@ -94,8 +94,8 @@ free and takes a couple of minutes.
    - **Scopes / permissions:** these are required. Tick `offline_access`
      (sign-in fails without it, and it's what lets the service stay
      signed in), plus the permissions to see your players and send them
-     commands. Pick the ones the dashboard describes as viewing devices /
-     players and controlling them. Content scopes such as
+     commands: `family:devices:view` and `family:devices:control`. The
+     `login` step asks for exactly these. Content scopes such as
      `user:content:manage` are for cards and playlists, which this
      service doesn't need.
 3. Copy the app's **client ID**. You'll need it in the next step.
@@ -122,7 +122,8 @@ Open `.env` in an editor and set at least:
 
 ```ini
 YOTO_CLIENT_ID=paste-your-client-id-here
-TZ=Europe/London          # your time zone, e.g. America/Chicago
+# Your time zone, e.g. America/Chicago
+TZ=Europe/London
 ```
 
 Also check `PUID` / `PGID`: they're the user and group the container runs
@@ -208,7 +209,7 @@ All settings go in `.env`. After changing one, run
 | `RETRY_SECONDS` | `30` | Wait before reconnecting after the connection drops. |
 | `CONNECT_TIMEOUT_SECONDS` | `180` | Give up on a stuck connection attempt after this long and retry. |
 | `YOTO_REDIRECT_URI` | `http://127.0.0.1:8787/callback` | Login only. Must match the callback URL registered on your Yoto app. |
-| `YOTO_SCOPES` | `openid profile offline_access` | Login only. OAuth scopes to request; add any extra scope names your Yoto app requires. |
+| `YOTO_SCOPES` | `openid profile offline_access family:devices:view family:devices:control` | Login only. OAuth scopes to request. Yoto grants a token only the scopes asked for here, so keep the device ones. |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Where the refresh token is kept. |
 
 To check your settings without starting anything:
@@ -399,6 +400,13 @@ again with `login --force` and restart: `docker compose restart`.
 allowed or pre-approved: your Yoto app probably has no scopes or is
 missing `offline_access`. See
 [Moving from an older Yoto app](#moving-from-an-older-yoto-app-no-scopes-or-device-code).
+
+**`no Yoto players found`, or timers never get set and the log shows
+permission / 403 errors**: the token is missing the device scopes. Make
+sure your Yoto app has `family:devices:view` and `family:devices:control`,
+then sign in again with `login --force` (a token only carries the scopes
+it was signed in with; earlier versions of this project didn't ask for
+them).
 
 **`PLAYERS matched none of this account's players`**: the log line lists
 the names it found. Use one of those exactly (case doesn't matter).

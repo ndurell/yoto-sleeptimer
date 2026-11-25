@@ -64,13 +64,16 @@ def should_arm(
     - Only while the player is playing.
     - Never when a sleep timer is already running (for example one set by
       hand in the Yoto app): that timer is left alone.
+    - Never while the timer state is unknown (``None``): the player hasn't
+      reported it yet, and arming could replace a timer set by hand. The
+      watcher waits for a report and decides what to do if none comes.
     - Not again within ``cooldown_seconds`` of our last arm on the same
       player, because one press of play can produce a burst of events.
     - Only inside ``active_hours``, if a window is configured.
     """
     if not playing:
         return False
-    if sleep_timer_active is True:
+    if sleep_timer_active is not False:
         return False
     if last_arm_monotonic is not None and now_monotonic - last_arm_monotonic < cooldown_seconds:
         return False
