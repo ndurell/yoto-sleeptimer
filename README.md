@@ -47,7 +47,11 @@ always on, like a home server, a NAS, a mini PC or a Raspberry Pi. It runs in Do
    same channel the Yoto app uses) and listens for playback events. Nothing
    is polled.
 3. When a player reports **playing** and **no sleep timer active**, it sends
-   that player a "set sleep timer" command.
+   that player a "set sleep timer" command. If a "playing" update arrives
+   before the player has said whether a timer is running, it waits up to
+   20 seconds for that report, so a timer set in the app is never replaced
+   by mistake. If the player still hasn't said by then, it assumes there's
+   no timer.
 4. It won't set a timer on the same player again for 2 minutes (one press
    of play can send a burst of events), and it never replaces a timer that
    is already running.
@@ -100,8 +104,10 @@ free and takes a couple of minutes.
      service doesn't need.
 3. Copy the app's **client ID**. You'll need it in the next step.
 
-New apps start out "unverified". That only means Yoto shows a warning on
-the sign-in page; it's fine for your own use.
+New apps start out "unverified", and Yoto keeps any app that uses
+`family:devices:control` unverified. That only means Yoto shows a warning on
+the sign-in page. It's fine for personal use and for sharing with other
+people.
 
 > **Already have an older Yoto app?** If you made one before Yoto added
 > scopes, or you signed in with the old "enter this code" (device-code)
@@ -346,8 +352,8 @@ scopes list is empty, move to a new app:
 
 1. **Create a new app** as in
    [step 1](#1-create-a-yoto-developer-app-get-a-client-id): public client,
-   callback URL `http://127.0.0.1:8787/callback`, `offline_access` plus the
-   device view / control scopes. Projects that have migrated report making
+   callback URL `http://127.0.0.1:8787/callback`, and the scopes
+   `offline_access`, `family:devices:view` and `family:devices:control`. Projects that have migrated report making
    a new app rather than adding scopes to the old one.
 2. **Put the new client ID in `.env`** (`YOTO_CLIENT_ID=...`).
 3. **Sign in again.** Your existing refresh token belongs to the old app,
@@ -407,6 +413,13 @@ sure your Yoto app has `family:devices:view` and `family:devices:control`,
 then sign in again with `login --force` (a token only carries the scopes
 it was signed in with; earlier versions of this project didn't ask for
 them).
+
+**Sign-in fails with `access_denied`**: every scope `login` asks for must
+be enabled on your Yoto app, so check all three from
+[step 1](#1-create-a-yoto-developer-app-get-a-client-id) are ticked. Some
+developers report that Yoto has to approve an app for the
+`family:devices:*` scopes before sign-in works. If the scopes are ticked
+and it still fails, contact Yoto developer support.
 
 **`PLAYERS matched none of this account's players`**: the log line lists
 the names it found. Use one of those exactly (case doesn't matter).

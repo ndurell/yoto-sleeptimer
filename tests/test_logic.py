@@ -63,6 +63,25 @@ class Parsing(unittest.TestCase):
         self.assertTrue(player_selected(frozenset(), "zzz", None))
 
 
+class DotEnv(unittest.TestCase):
+    def test_utf8_quotes_and_inline_comments(self):
+        from yoto_sleeptimer.config import _load_dotenv
+        keys = ("YST_A", "YST_B", "YST_C", "YST_D")
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".env"
+            path.write_text("# comment\nYST_A=B\u00e9b\u00e9\nYST_B=Europe/London   # zone\n"
+                            "YST_C='has # hash'\nYST_D=a#b\n", encoding="utf-8")
+            for k in keys:
+                os.environ.pop(k, None)
+            try:
+                _load_dotenv(path)
+                self.assertEqual([os.environ[k] for k in keys],
+                                 ["B\u00e9b\u00e9", "Europe/London", "has # hash", "a#b"])
+            finally:
+                for k in keys:
+                    os.environ.pop(k, None)
+
+
 class TokenStore(unittest.TestCase):
     def test_atomic_write_is_private(self):
         with tempfile.TemporaryDirectory() as d:
