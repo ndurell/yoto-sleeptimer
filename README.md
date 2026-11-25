@@ -5,7 +5,8 @@ Automatically set a sleep timer on your Yoto players.
 Whenever a Yoto player starts playing and no sleep timer is running, this
 sets one (90 minutes by default). Audio then always stops on its own, even
 if nobody remembers to set a timer at bedtime. A timer someone sets by hand
-in the Yoto app is left alone.
+in the Yoto app is left alone whenever the player reports it (see
+[How it works](#how-it-works) for the one exception).
 
 It's a small Python service that runs all the time on something that's
 always on, like a home server, a NAS, a mini PC or a Raspberry Pi. It runs in Docker
@@ -49,12 +50,15 @@ always on, like a home server, a NAS, a mini PC or a Raspberry Pi. It runs in Do
 3. When a player reports **playing** and **no sleep timer active**, it sends
    that player a "set sleep timer" command. If a "playing" update arrives
    before the player has said whether a timer is running, it waits up to
-   20 seconds for that report, so a timer set in the app is never replaced
-   by mistake. If the player still hasn't said by then, it assumes there's
-   no timer.
+   20 seconds for that report. If the player still hasn't said by then, it
+   assumes there's no timer and sets one, so players that never report
+   their timer state still get timers. The trade-off: in the rare case that
+   a player has a timer set in the app but doesn't report it within those
+   20 seconds, that timer is replaced with the automatic one. Connected
+   players normally report within a few seconds.
 4. It won't set a timer on the same player again for 2 minutes (one press
-   of play can send a burst of events), and it never replaces a timer that
-   is already running.
+   of play can send a burst of events), and it never replaces a timer the
+   player has reported as running.
 5. If the connection drops it reconnects after 30 seconds, forever.
 6. Yoto replaces the refresh token from time to time. The service saves
    each new one, so it keeps working across restarts without signing in
