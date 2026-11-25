@@ -8,7 +8,7 @@ if nobody remembers to set a timer at bedtime. A timer someone sets by hand
 in the Yoto app is left alone.
 
 It's a small Python service that runs all the time on something that's
-always on, like a Raspberry Pi, a home server or a NAS. It runs in Docker
+always on, like a home server, a NAS, a mini PC or a Raspberry Pi. It runs in Docker
 (recommended) or as plain Python.
 
 ```
@@ -63,9 +63,9 @@ again after the timer ran out, a fresh timer is set.
 
 - One or more Yoto players on your Yoto account.
 - An always-on machine with internet access. Anything that runs Docker
-  works: a Raspberry Pi 3/4/5 (64-bit Raspberry Pi OS), a Linux box, a
-  Synology or other NAS, a Mac. It needs very little memory or CPU.
-- **Docker** with the Compose plugin. On a Raspberry Pi or Linux:
+  works: a Linux box, a NAS, a Mac, a Windows PC with Docker Desktop, or
+  a 64-bit Raspberry Pi. It needs very little memory or CPU.
+- **Docker** with the Compose plugin. On Linux:
   ```bash
   curl -fsSL https://get.docker.com | sh
   sudo usermod -aG docker $USER   # then log out and back in
@@ -122,12 +122,12 @@ Open `.env` in an editor and set at least:
 
 ```ini
 YOTO_CLIENT_ID=paste-your-client-id-here
-TZ=Europe/London          # your time zone, e.g. America/New_York
+TZ=Europe/London          # your time zone, e.g. America/Chicago
 ```
 
 Also check `PUID` / `PGID`: they're the user and group the container runs
 as, and must own the `data` folder. Run `id -u` and `id -g` to see yours
-(on a Raspberry Pi the first user is normally `1000` / `1000`, which is
+(on most Linux systems the first user is `1000` / `1000`, which is
 the default).
 
 Everything else is optional; see [Settings](#settings).
@@ -149,16 +149,16 @@ hop reaches the service depends on where your browser is:
 - **Browser on the same machine** (a desktop, laptop or Mac): nothing to
   do. The browser shows "Signed in" and the terminal finishes by itself.
 
-- **Headless machine, like a Pi you reach over SSH.** Pick either:
+- **Headless machine you reach over SSH** (a server or NAS). Pick either:
   - **Paste the address (simplest).** After you approve, your browser
     shows a "can't connect" / "site can't be reached" page. That's
     expected. Copy the whole address from the address bar (it starts with
     `http://127.0.0.1:8787/callback?code=`), paste it into the SSH
     terminal, and press Enter.
-  - **Forward the port.** Connect to the Pi with
-    `ssh -L 8787:127.0.0.1:8787 pi@raspberrypi.local` and run the login
+  - **Forward the port.** Connect with
+    `ssh -L 8787:127.0.0.1:8787 you@your-server` and run the login
     command in that session. The browser's redirect then travels through
-    SSH to the Pi and finishes automatically.
+    SSH to the server and finishes automatically.
 
 When it's done you'll see something like:
 
@@ -269,9 +269,9 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-User=pi
-WorkingDirectory=/home/pi/yoto-sleeptimer
-ExecStart=/home/pi/yoto-sleeptimer/.venv/bin/python -m yoto_sleeptimer run
+User=youruser
+WorkingDirectory=/home/youruser/yoto-sleeptimer
+ExecStart=/home/youruser/yoto-sleeptimer/.venv/bin/python -m yoto_sleeptimer run
 Restart=always
 RestartSec=30
 
@@ -284,8 +284,8 @@ Then `sudo systemctl enable --now yoto-sleeptimer` and follow the logs with
 
 ## Adding it to an existing Docker Compose setup
 
-If you already run other services (Home Assistant, Homebridge, Pi-hole,
-Jellyfin...) from one `docker-compose.yml` on a home server, you can add
+If you already run other services from one `docker-compose.yml` on a
+home server, you can add
 this as one more service instead of running it from its own folder. Put
 this repository in a subfolder, say `yoto-sleeptimer/`, next to your
 compose file, and add:
@@ -358,12 +358,10 @@ scopes list is empty, move to a new app:
    `Watching N player(s)` and `Connected; waiting for playback.` again.
 5. Once it's working, you can delete the old app in the dashboard.
 
-**Coming from your own script?** If you had a hand-rolled watcher with the
-client ID in a `config.json` and a `.refresh_token` file, set this project
-up from scratch with the new app as above. It needs nothing from the old
-setup. Stop the old watcher before you start this one: two watchers using
-the same account would both set timers, and two copies sharing one token
-would rotate it out from under each other.
+**Running more than one copy?** Don't: stop any other watcher or script on
+the same Yoto account before you start this one. Two would both set
+timers, and two copies sharing one token would rotate it out from under
+each other.
 
 These dates and details come from other projects' migration notes, not an
 official Yoto announcement. Check the Yoto developer docs at
@@ -455,7 +453,7 @@ tests/            unit tests; no network, no Yoto account needed
 
 The decision of *when* to set a timer lives in `logic.py` and has no
 network code, so it's easy to change and test. GitHub Actions runs the
-tests and builds the image for `amd64` and `arm64` (Raspberry Pi) on every
+tests and builds the image for `amd64` and `arm64` (ARM boards, Apple Silicon) on every
 pull request.
 
 Library versions are pinned in `requirements.txt`. Yoto's API changes from
