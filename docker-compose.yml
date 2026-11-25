@@ -1,0 +1,21 @@
+services:
+  yoto-sleeptimer:
+    build: .
+    image: yoto-sleeptimer:local
+    container_name: yoto-sleeptimer
+    restart: unless-stopped
+    env_file: .env
+    user: "${PUID:-1000}:${PGID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      # A directory, not a single file: the watcher rotates the refresh token
+      # and atomically replaces the file, which needs a writable directory.
+      - ./data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
