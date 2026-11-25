@@ -34,6 +34,7 @@ always on, like a Raspberry Pi, a home server or a NAS. It runs in Docker
 - [Day-to-day](#day-to-day)
 - [Running without Docker](#running-without-docker)
 - [Adding it to an existing Docker Compose setup](#adding-it-to-an-existing-docker-compose-setup)
+- [Moving from an older Yoto app](#moving-from-an-older-yoto-app-no-scopes-or-device-code)
 - [Troubleshooting](#troubleshooting)
 - [Security notes](#security-notes)
 - [Development](#development)
@@ -90,14 +91,21 @@ free and takes a couple of minutes.
      ```
      (If you want a different port, register that URL instead and set
      `YOTO_REDIRECT_URI` to match; see [Settings](#settings).)
-   - **Scopes / permissions:** allow offline access (refresh tokens), and
-     the permissions to see your players and send them commands. The
-     names of these can change, so pick the ones the dashboard describes
-     as reading devices / players and controlling playback.
+   - **Scopes / permissions:** these are required. Tick `offline_access`
+     (sign-in fails without it, and it's what lets the service stay
+     signed in), plus the permissions to see your players and send them
+     commands. Pick the ones the dashboard describes as viewing devices /
+     players and controlling them. Content scopes such as
+     `user:content:manage` are for cards and playlists, which this
+     service doesn't need.
 3. Copy the app's **client ID**. You'll need it in the next step.
 
 New apps start out "unverified". That only means Yoto shows a warning on
 the sign-in page; it's fine for your own use.
+
+> **Already have an older Yoto app?** If you made one before Yoto added
+> scopes, or you signed in with the old "enter this code" (device-code)
+> flow, see [Moving from an older Yoto app](#moving-from-an-older-yoto-app-no-scopes-or-device-code).
 
 ### 2. Get the code and configure it
 
@@ -315,6 +323,52 @@ Mount a **directory** at `/data`, not just the token file: the service
 saves a rotated token by writing a new file and renaming it over the old
 one, which doesn't work on a single-file bind mount.
 
+## Moving from an older Yoto app (no scopes or device-code)
+
+Yoto has changed how developer apps work. Two changes matter if you set up
+a Yoto app (for this or any other script) a while ago:
+
+- **Apps without scopes are being switched off.** Older apps were created
+  before Yoto had scopes, so they list none. Several open-source Yoto
+  projects report that client IDs with no scopes stop working after
+  **30 November 2026**. Once that happens, an app with no scopes can't get
+  new access tokens, so a watcher using it stops setting timers. It may
+  look connected right up until it stops.
+- **Device-code sign-in is deprecated.** Yoto now recommends browser
+  sign-in with a local callback for command-line and headless apps, which
+  is what this project's `login` uses. The old flow had you visit a page
+  and type a short code. Tokens you already got that way keep refreshing,
+  but you can't count on that flow for a new sign-in.
+
+To check yours, open your app in the Yoto developer dashboard. If the
+scopes list is empty, move to a new app:
+
+1. **Create a new app** as in
+   [step 1](#1-create-a-yoto-developer-app-get-a-client-id): public client,
+   callback URL `http://127.0.0.1:8787/callback`, `offline_access` plus the
+   device view / control scopes. Projects that have migrated report making
+   a new app rather than adding scopes to the old one.
+2. **Put the new client ID in `.env`** (`YOTO_CLIENT_ID=...`).
+3. **Sign in again.** Your existing refresh token belongs to the old app,
+   and adding scopes doesn't upgrade a token you already have:
+   ```bash
+   docker compose run --rm -p 127.0.0.1:8787:8787 yoto-sleeptimer login --force
+   ```
+4. **Restart:** `docker compose up -d`. The log should show
+   `Watching N player(s)` and `Connected; waiting for playback.` again.
+5. Once it's working, you can delete the old app in the dashboard.
+
+**Coming from your own script?** If you had a hand-rolled watcher with the
+client ID in a `config.json` and a `.refresh_token` file, set this project
+up from scratch with the new app as above. It needs nothing from the old
+setup. Stop the old watcher before you start this one: two watchers using
+the same account would both set timers, and two copies sharing one token
+would rotate it out from under each other.
+
+These dates and details come from other projects' migration notes, not an
+official Yoto announcement. Check the Yoto developer docs at
+[yoto.dev](https://yoto.dev) for the current rules.
+
 ## Troubleshooting
 
 **`YOTO_CLIENT_ID is not set`**: `.env` is missing, or still has the
@@ -341,6 +395,12 @@ and sign in again.
 was revoked (for example you changed your Yoto password), expired after a
 long time switched off, or a second copy of the service rotated it. Sign in
 again with `login --force` and restart: `docker compose restart`.
+
+**It worked for months and then stopped, around or after 30 November
+2026**, or sign-in fails with an error about the client or scopes not being
+allowed or pre-approved: your Yoto app probably has no scopes or is
+missing `offline_access`. See
+[Moving from an older Yoto app](#moving-from-an-older-yoto-app-no-scopes-or-device-code).
 
 **`PLAYERS matched none of this account's players`**: the log line lists
 the names it found. Use one of those exactly (case doesn't matter).
